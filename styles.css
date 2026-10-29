@@ -221,3 +221,6 @@ body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
 .payment-history-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap}
 .payment-history-actions .tiny-button{padding:6px 8px;white-space:nowrap}
 @media(max-width:380px){.payment-history-row{align-items:flex-start!important;flex-direction:column}.payment-history-actions{justify-content:flex-start;width:100%}}
+
+/* Bills tab: separate bills to pay from paid history. */
+.bill-view-switch{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;margin:12px 0;background:#e9eee7;border-radius:14px}.bill-view-button{min-width:0;border:0;border-radius:10px;background:transparent;color:var(--muted);padding:11px 8px;font:inherit;font-size:12px;font-weight:750;cursor:pointer}.bill-view-button.selected{background:#fff;color:var(--sage-deep);box-shadow:0 2px 8px rgba(25,45,30,.07)}.bill-filter-row-single{display:flex;justify-content:flex-end}.bill-filter-row-single .mini-action{min-width:95px}.bill-history-summary{margin-top:4px}
