@@ -27,7 +27,7 @@
   const state = {
     transactions: [], customCategories: {income: [], expense: []}, planItems: [], currentType: "expense",
     amountText: "0", expression: "", replaceOnDigit: false, selectedMonth: monthKey(new Date()), planMonth: monthKey(new Date()),
-    planTab: "overview", debtFilter: "owe", billFilter: "all", billSearch: "", billMonth: monthKey(new Date()), authMode: "login", supabase: null, user: null, syncing: false
+    planTab: "overview", debtFilter: "owe", billView: "due", billFilter: "all", billSearch: "", billMonth: monthKey(new Date()), authMode: "login", supabase: null, user: null, syncing: false
   };
 
   function uid() {
@@ -327,7 +327,7 @@
     const tx={id:uid(),type:"expense",amount:payment.amount,category:"Bills",note:`${item.title} payment${payment.reference?" · Ref "+payment.reference:""}`,date:payment.date,created_at:payment.created_at,updated_at:payment.created_at,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",bill_id:item.id,bill_payment_id:payment.id};
     payment.transactionId=tx.id;item.payments.push(payment);item.paidAmount=Number(item.paidAmount||0)+payment.amount;item.done=billRemaining(item)<0.005;
     await localPut(tx);state.transactions.push(tx);savePlanItems();
-    if(item.done&&item.recurrence&&item.recurrence!=="none"&&!item.nextGenerated){const next={...item,id:uid(),date:nextRecurringDate(item.date,item.recurrence),paidAmount:0,payments:[],done:false,nextGenerated:false,created_at:new Date().toISOString(),receiptName:"",receiptData:"",sourceBillId:item.id};item.nextGenerated=true;state.planItems.push(next);}
+    if(item.done&&item.recurrence&&item.recurrence!=="none"){const nextDate=nextRecurringDate(item.date,item.recurrence);const alreadyGenerated=state.planItems.some(x=>x.kind==="bill"&&(String(x.sourceBillId||"")===String(item.id)||String(x.id)!==String(item.id)&&x.title===item.title&&x.date===nextDate&&String(x.recurrence||"none")===String(item.recurrence)&&Number(x.amount)===Number(item.amount)&&Array.isArray(x.payments)&&x.payments.length===0));if(!alreadyGenerated){const next={...item,id:uid(),date:nextDate,paidAmount:0,payments:[],done:false,nextGenerated:false,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),receiptName:"",receiptData:"",sourceBillId:item.id};state.planItems.push(next);}item.nextGenerated=true;}
     savePlanItems();renderAll();if(state.user&&navigator.onLine)syncNow();setToast(item.done?"Bill paid and expense recorded.":"Partial payment recorded.");
   }
   async function payBill(id){
@@ -389,7 +389,7 @@
     const due=new Date(item.date+"T12:00:00").toLocaleDateString("en-PH",{weekday:"short",month:"long",day:"numeric",year:"numeric"});
     const paymentHistory=(item.payments||[]).map(p=>{
       const paidAt=p.created_at?new Date(p.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}):p.date||"Date unavailable";
-      return `<div class="payment-history-row"><div class="payment-history-info"><strong>${money(p.amount)}</strong><small>${escapeHtml(paidAt)} · ${escapeHtml(p.method||"Other")}</small>${p.reference?`<small>Reference: ${escapeHtml(p.reference)}</small>`:""}</div><div class="payment-history-actions">${item.receiptData?`<button class="tiny-button" data-open-payment-receipt="${escapeHtml(item.id)}" data-payment-id="${escapeHtml(p.id)}">View receipt</button>`:""}<button class="tiny-button danger-action" data-delete-payment="${escapeHtml(item.id)}" data-payment-id="${escapeHtml(p.id)}">Delete</button></div></div>`;
+      return `<div class="payment-history-row"><div class="payment-history-info"><strong>${money(p.amount)}</strong><small>${escapeHtml(paidAt)} · ${escapeHtml(p.method||"Other")}</small>${p.reference?`<small>Reference: ${escapeHtml(p.reference)}</small>`:""}</div><div class="payment-history-actions">${p.receiptData?`<button class="tiny-button" data-open-payment-receipt="${escapeHtml(item.id)}" data-payment-id="${escapeHtml(p.id)}">View receipt</button>`:""}<button class="tiny-button danger-action" data-delete-payment="${escapeHtml(item.id)}" data-payment-id="${escapeHtml(p.id)}">Delete</button></div></div>`;
     }).join("")||'<p class="helper-note">No payments recorded yet.</p>';
     $("planDetailTitle").textContent=item.title;
     $("planDetailContent").innerHTML=`<div class="detail-summary"><span>${escapeHtml(kindLabel)}</span><strong>${escapeHtml(due)}</strong>${item.kind!=="activity"?`<strong>${money(item.kind==="bill"?billRemaining(item):item.amount||0)}${item.kind==="bill"?" remaining":""}</strong>`:""}${item.details&&item.kind!=="debt"?`<p>${escapeHtml(item.details)}</p>`:""}${item.kind==="bill"?`<div class="bill-progress"><i style="width:${Math.min(100,Number(item.amount)?Number(item.paidAmount||0)/Number(item.amount)*100:0)}%"></i></div><p>Paid ${money(item.paidAmount||0)} of ${money(item.amount)}</p><div class="payment-history">${paymentHistory}</div>${item.receiptData&&!(item.payments||[]).length?`<button class="secondary-button full-width" data-open-receipt="${escapeHtml(item.id)}">View receipt</button>`:""}`:""}${item.kind==="debt"&&item.done&&item.settledAt?`<p>Settled ${escapeHtml(new Date(item.settledAt).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}))}</p>`:""}</div>`;
@@ -438,15 +438,28 @@
     const renderList=(target,list,empty)=>{const el=$(target);if(!el)return;const sorted=[...list].sort((a,b)=>a.date.localeCompare(b.date));el.innerHTML=sorted.length?sorted.map(planItemHtml).join(""):`<p class="empty-state">${empty}</p>`;};
     renderList("calendarItems",items,"No activities or due dates this month. Tap a calendar date or Add activity.");
     const allBills=state.planItems.filter(i=>i.kind==="bill");
-    const billSearch=$("billSearch")?.value?.trim().toLowerCase()||"";const billFilter=$("billStatusFilter")?.value||"all";const billMonth=$("billMonthFilter")?.value||"all";
-    const filteredBills=allBills.filter(i=>{const matchSearch=!billSearch||`${i.title} ${i.billCategory||""} ${i.details||""}`.toLowerCase().includes(billSearch);const status=billStatus(i).toLowerCase();const matchStatus=billFilter==="all"||(billFilter==="paid"&&status==="paid")||(billFilter==="unpaid"&&status==="unpaid")||(billFilter==="overdue"&&status==="overdue");const matchMonth=billMonth==="all"||i.date.startsWith(billMonth);return matchSearch&&matchStatus&&matchMonth;}).sort((a,b)=>a.date.localeCompare(b.date));
-    const unpaid=allBills.filter(i=>!billIsPaid(i));const paidThisMonth=allBills.filter(i=>billIsPaid(i)&&(i.payments||[]).some(p=>p.date.startsWith(monthKey(new Date()))));
+    const billSearch=$("billSearch")?.value?.trim().toLowerCase()||"";
+    const matchesSearch=i=>!billSearch||`${i.title} ${i.billCategory||""} ${i.details||""}`.toLowerCase().includes(billSearch);
+    const unpaid=allBills.filter(i=>!billIsPaid(i));
+    const paidBills=allBills.filter(i=>billIsPaid(i)&&(Array.isArray(i.payments)?i.payments.length:0)>0);
+    const dueBills=unpaid.filter(matchesSearch).sort((a,b)=>a.date.localeCompare(b.date));
+    const historyBills=paidBills.filter(matchesSearch).sort((a,b)=>{
+      const lastPayment=item=>Math.max(0,...(item.payments||[]).map(p=>new Date(p.created_at||p.date||0).getTime()||0));
+      return lastPayment(b)-lastPayment(a);
+    });
+    document.querySelectorAll("[data-bill-view]").forEach(b=>{const active=b.dataset.billView===state.billView;b.classList.toggle("selected",active);b.setAttribute("aria-pressed",String(active));});
+    const showingHistory=state.billView==="history";
+    if($("billHistorySummary"))$("billHistorySummary").classList.toggle("hidden",!showingHistory);
+    if($("billViewHint"))$("billViewHint").textContent=showingHistory?"Bills that have been fully paid. Open a bill to review its recorded payments.":"Unpaid, overdue, partially paid, and upcoming bills. Each recurring month is shown as its own due date.";
     if($("billUnpaidTotal"))$("billUnpaidTotal").textContent=money(unpaid.reduce((sum,i)=>sum+billRemaining(i),0));
     if($("billDueCount")){const today=todayKey(),weekEnd=dateKey(new Date(Date.now()+7*86400000));$("billDueCount").textContent=String(unpaid.filter(i=>i.date>=today&&i.date<=weekEnd).length);}
-    if($("billPaidTotal"))$("billPaidTotal").textContent=money(paidThisMonth.reduce((sum,i)=>sum+(i.payments||[]).filter(p=>p.date.startsWith(monthKey(new Date()))).reduce((n,p)=>n+Number(p.amount||0),0),0));
+    const currentMonth=monthKey(new Date());
+    const paidThisMonth=allBills.reduce((sum,i)=>sum+(i.payments||[]).filter(p=>String(p.date||"").startsWith(currentMonth)).reduce((n,p)=>n+Number(p.amount||0),0),0);
+    if($("billPaidTotal"))$("billPaidTotal").textContent=money(paidThisMonth);
     if($("billHistoryMonth"))$("billHistoryMonth").textContent=new Date().toLocaleDateString("en-PH",{month:"long",year:"numeric"});
-    if($("billHistoryTotal"))$("billHistoryTotal").textContent=money(allBills.reduce((sum,i)=>sum+(i.payments||[]).filter(p=>p.date.startsWith(monthKey(new Date()))).reduce((n,p)=>n+Number(p.amount||0),0),0));
-    const billEl=$("billsList");if(billEl)billEl.innerHTML=filteredBills.length?filteredBills.map(planItemHtml).join(""):'<p class="empty-state">No bills match this filter. Tap Add bill to create one.</p>';
+    if($("billHistoryTotal"))$("billHistoryTotal").textContent=money((showingHistory?historyBills:paidBills).reduce((sum,i)=>sum+(i.payments||[]).filter(p=>String(p.date||"").startsWith(currentMonth)).reduce((n,p)=>n+Number(p.amount||0),0),0));
+    const visibleBills=showingHistory?historyBills:dueBills;
+    const billEl=$("billsList");if(billEl)billEl.innerHTML=visibleBills.length?visibleBills.map(planItemHtml).join(""):`<p class="empty-state">${showingHistory?"No paid bills found. Paid bills will appear here after you record a full payment.":"No bills to pay right now. Tap Add bill to create one."}</p>`;
     const debts=state.planItems.filter(i=>i.kind==="debt");
     const owed=debts.filter(i=>(i.details||"owe").toLowerCase()!=="collect");
     const collect=debts.filter(i=>(i.details||"owe").toLowerCase()==="collect");
@@ -727,8 +740,8 @@
     $("addOverviewActivity").addEventListener("click",()=>addPlanItem("activity"));
     $("addOverviewBill").addEventListener("click",()=>addPlanItem("bill"));
     $("addOverviewDebt").addEventListener("click",()=>addPlanItem("debt"));
-    ["billSearch","billStatusFilter","billMonthFilter"].forEach(id=>$(id)?.addEventListener(id==="billSearch"?"input":"change",renderPlan));
-    $("clearBillFilters")?.addEventListener("click",()=>{ $("billSearch").value="";$("billStatusFilter").value="unpaid";$("billMonthFilter").value="";renderPlan(); });
+    $("billSearch")?.addEventListener("input",renderPlan);
+    $("clearBillFilters")?.addEventListener("click",()=>{ $("billSearch").value="";renderPlan(); });
     $("addDebt").addEventListener("click",()=>addPlanItem("debt"));
     $("prevPlanMonth").addEventListener("click",()=>changePlanMonth(-1));
     $("nextPlanMonth").addEventListener("click",()=>changePlanMonth(1));
@@ -739,6 +752,7 @@
     document.addEventListener("click",e=>{
       const edit=e.target.closest("[data-edit-tx]");if(edit){const tx=getTx(edit.dataset.editTx);if(tx)openTransactionForm(tx.type,tx);return;}
       const del=e.target.closest("[data-delete-tx]");if(del){deleteTransaction(del.dataset.deleteTx);return;}
+      const billView=e.target.closest("[data-bill-view]");if(billView){state.billView=billView.dataset.billView==="history"?"history":"due";renderPlan();return;}
       const planTab=e.target.closest("[data-plan-tab]");if(planTab){setPlanTab(planTab.dataset.planTab);return;}
       const debtFilter=e.target.closest("[data-debt-filter]");if(debtFilter){state.debtFilter=debtFilter.dataset.debtFilter;renderPlan();return;}
       const openPlanTab=e.target.closest("[data-open-plan-tab]");if(openPlanTab){setPlanTab(openPlanTab.dataset.openPlanTab);return;}
