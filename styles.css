@@ -212,3 +212,12 @@ body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
 /* Keep backup/restore wiring in the DOM but hide the controls from the personal-use UI */
 .account-actions{display:none!important}
 @media(max-width:420px){.topbar{padding-left:16px;padding-right:16px;gap:10px}.brand{gap:8px}.topbar-actions{gap:5px}.topbar-actions .icon-button{width:38px;height:38px;flex-basis:38px;border-radius:12px}}
+
+/* Clear, compact payment history rows */
+.payment-history-row{align-items:center;gap:10px!important}
+.payment-history-info{display:grid;gap:3px;min-width:0;flex:1}
+.payment-history-info strong{font-size:13px;color:var(--ink)}
+.payment-history-info small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.payment-history-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap}
+.payment-history-actions .tiny-button{padding:6px 8px;white-space:nowrap}
+@media(max-width:380px){.payment-history-row{align-items:flex-start!important;flex-direction:column}.payment-history-actions{justify-content:flex-start;width:100%}}
