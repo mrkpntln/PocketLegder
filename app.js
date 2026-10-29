@@ -515,10 +515,10 @@
     if(!configured){
       $("syncHeadline").textContent="Offline-first storage";
       $("syncDescription").textContent="Your entries are saved on this device. Sign in to securely sync your data across devices.";
-      $("authMessage").textContent="Sign in or create an account to enable cloud sync. Local mode remains available offline.";
+      $("authMessage").textContent="Sign in with an existing account to enable cloud sync.";
     }else{
       $("syncHeadline").textContent=state.user?"Account connected":"Sign in to sync";
-      $("syncDescription").textContent=state.user?"Your account is connected. Pending changes can sync when you're online.":"Create an account or sign in to sync your transactions across devices.";
+      $("syncDescription").textContent=state.user?"Your account is connected. Pending changes can sync when you're online.":"Sign in with your existing email and password to sync your transactions across devices.";
       if(state.user)$("signedInEmail").textContent=state.user.email||"Signed-in user";
     }
     $("authForm").classList.toggle("hidden",!configured);
@@ -532,24 +532,13 @@
     const email=$("authEmail").value.trim(),password=$("authPassword").value;
     $("authSubmit").disabled=true;$("authMessage").textContent="Please wait…";
     try{
-      const result=state.authMode==="signup"
-        ?await state.supabase.auth.signUp({email,password})
-        :await state.supabase.auth.signInWithPassword({email,password});
+      const result=await state.supabase.auth.signInWithPassword({email,password});
       if(result.error)throw result.error;
-      $("authMessage").textContent=state.authMode==="signup"&&!result.data.session?"Account created. Check your email to confirm it, then sign in.":"Signed in successfully.";
-      if(result.data.user&&!result.data.session&&state.authMode==="signup")setToast("Check your email to confirm your account.");
-      else setToast("Account connected.");
-    }catch(err){$("authMessage").textContent=err.message||"Authentication failed.";}
+      $("authMessage").textContent="Signed in successfully.";
+      setToast("Account connected.");
+    }catch(err){$("authMessage").textContent=err.message||"Sign-in failed.";}
     finally{$("authSubmit").disabled=false;}
   }
-  async function signInWithGoogle() {
-    if(!state.supabase){$("authMessage").textContent="Supabase is not configured.";return;}
-    $("authMessage").textContent="Opening Google sign-in…";
-    const redirectTo = window.location.origin + window.location.pathname;
-    const {error}=await state.supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo}});
-    if(error)$("authMessage").textContent=error.message;
-  }
-
   function markSyncDeleted(table,id) {
     const meta=readMeta(), all=meta.syncTombstones||{};
     const ids=new Set(all[table]||[]);ids.add(String(id));
@@ -641,14 +630,7 @@
     $("notificationButton").addEventListener("click",()=>{$("notificationModal").classList.remove("hidden");renderNotifications();});
     document.querySelectorAll("[data-close-notifications]").forEach(b=>b.addEventListener("click",()=>$("notificationModal").classList.add("hidden")));
     document.querySelectorAll("[data-close-account]").forEach(b=>b.addEventListener("click",()=>$("accountModal").classList.add("hidden")));
-    document.querySelectorAll("[data-auth-mode]").forEach(b=>b.addEventListener("click",()=>{
-      state.authMode=b.dataset.authMode;document.querySelectorAll("[data-auth-mode]").forEach(x=>x.classList.toggle("selected",x===b));
-      $("authSubmit").textContent=state.authMode==="signup"?"Create account":"Sign in";
-      $("authPassword").autocomplete=state.authMode==="signup"?"new-password":"current-password";
-      $("authMessage").textContent="";
-    }));
     $("authForm").addEventListener("submit",submitAuth);
-    $("googleSignIn").addEventListener("click",signInWithGoogle);
     $("syncNow").addEventListener("click",syncNow);$("signOut").addEventListener("click",signOut);
     $("backupJson").addEventListener("click",backupJson);$("restoreJson").addEventListener("change",e=>{if(e.target.files?.[0])restoreJson(e.target.files[0]);e.target.value="";});
     $("monthPicker").addEventListener("change",e=>{state.selectedMonth=e.target.value||monthKey(new Date());renderDashboard();});
