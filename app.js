@@ -728,7 +728,7 @@
     $("addOverviewBill").addEventListener("click",()=>addPlanItem("bill"));
     $("addOverviewDebt").addEventListener("click",()=>addPlanItem("debt"));
     ["billSearch","billStatusFilter","billMonthFilter"].forEach(id=>$(id)?.addEventListener(id==="billSearch"?"input":"change",renderPlan));
-    $("clearBillFilters")?.addEventListener("click",()=>{ $("billSearch").value="";$("billStatusFilter").value="all";$("billMonthFilter").value="";renderPlan(); });
+    $("clearBillFilters")?.addEventListener("click",()=>{ $("billSearch").value="";$("billStatusFilter").value="unpaid";$("billMonthFilter").value="";renderPlan(); });
     $("addDebt").addEventListener("click",()=>addPlanItem("debt"));
     $("prevPlanMonth").addEventListener("click",()=>changePlanMonth(-1));
     $("nextPlanMonth").addEventListener("click",()=>changePlanMonth(1));
