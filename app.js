@@ -505,6 +505,10 @@
     });
   }
   function updateAccountUI() {
+    const wasAuthRequired=document.body.classList.contains("auth-required");
+    document.body.classList.toggle("auth-required",!state.user);
+    if(!state.user) $("accountModal").classList.remove("hidden");
+    else if(wasAuthRequired) $("accountModal").classList.add("hidden");
     const configured=!!state.supabase;
     $("accountSignedOut").classList.toggle("hidden",!!state.user||!configured);
     $("accountSignedIn").classList.toggle("hidden",!state.user);
