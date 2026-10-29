@@ -215,8 +215,11 @@
       <div id="accountSignedIn" class="hidden">
         <p class="signed-in-label">Signed in as <strong id="signedInEmail"></strong></p>
         <button id="syncNow" class="primary-button full-width">Sync now</button>
-        <button id="resetTestData" class="danger-button full-width">Reset test data</button>
-        <p class="helper-note">Clears transactions, bills, debts, activities and payment records on this device and in Supabase for this account. Your login and custom categories stay intact.</p>
+        <details class="danger-zone">
+          <summary>Advanced security &amp; destructive actions</summary>
+          <p class="helper-note">Reset requires password re-authentication, a confirmation phrase, and a server-side ownership check. It clears only this signed-in account\u2019s cloud records plus this account\u2019s tagged local transactions.</p>
+          <button id="resetTestData" class="danger-button full-width">Reset test data</button>
+        </details>
         <button id="signOut" class="secondary-button full-width">Sign out</button>
       </div>
       <div class="account-actions">
