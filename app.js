@@ -714,12 +714,17 @@
     if(!state.supabase||!state.user){setToast("Sign in first to reset this account's cloud data.");return;}
     if(!navigator.onLine){setToast("Connect to the internet before resetting cloud data.");return;}
     if(state.syncing){setToast("Wait for syncing to finish, then try again.");return;}
-    const approved=confirm("RESET ALL TEST DATA for "+(state.user.email||"this account")+"? This clears transactions, bills, debts, activities and payment records on this device and in Supabase. This cannot be undone. Your login and custom categories will remain.");
+    const accountEmail=(state.user.email||"").trim();
+    const approved=confirm("RESET ALL TEST DATA for "+(accountEmail||"this account")+"? This clears this account's transactions, bills, debts, activities and payment records in Supabase. Local data on this device will also be cleared. This cannot be undone.");
     if(!approved)return;
+    const typedEmail=prompt("Security check: type the signed-in email exactly to confirm the reset.");
+    if(typedEmail===null||typedEmail.trim().toLowerCase()!==accountEmail.toLowerCase()){setToast("Reset cancelled: email confirmation did not match.");return;}
     const button=$("resetTestData");if(button)button.disabled=true;
     try{
       const userId=state.user.id, now=new Date().toISOString();
-      const localTransactions=await localGetAll();
+      const allLocalTransactions=await localGetAll();
+      // Only treat explicitly account-tagged local rows as belonging to this account.
+      const localTransactions=allLocalTransactions.filter(tx=>String(tx.user_id||"")===String(userId));
       const localPlanIds=state.planItems.map(item=>String(item.id));
       const localTxIds=localTransactions.map(tx=>String(tx.id));
       const [remoteTx,remotePlans]=await Promise.all([
@@ -744,7 +749,8 @@
         ledger_transactions:[...new Set([...(old.ledger_transactions||[]),...txIds])],
         plan_items:[...new Set([...(old.plan_items||[]),...planIds])]
       },planItems:[]});
-      for(const tx of await localGetAll())await localDelete(tx.id);
+      // Never delete untagged or other-account transaction rows from the shared device database.
+      for(const tx of localTransactions)await localDelete(tx.id);
       state.transactions=[];
       state.planItems=[];
       renderAll();
