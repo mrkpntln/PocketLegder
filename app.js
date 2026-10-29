@@ -633,6 +633,7 @@
     document.querySelectorAll("[data-form-type]").forEach(b=>b.addEventListener("click",()=>setFormType(b.dataset.formType)));
     $("calculator").addEventListener("click",e=>{const b=e.target.closest("[data-key]");if(b)calcKey(b.dataset.key);});
     $("transactionForm").addEventListener("submit",saveTransaction);
+    $("accountButton").addEventListener("click",()=>{$("accountModal").classList.remove("hidden");updateAccountUI();});
     $("notificationButton").addEventListener("click",()=>{$("notificationModal").classList.remove("hidden");renderNotifications();});
     document.querySelectorAll("[data-close-notifications]").forEach(b=>b.addEventListener("click",()=>$("notificationModal").classList.add("hidden")));
     document.querySelectorAll("[data-close-account]").forEach(b=>b.addEventListener("click",()=>$("accountModal").classList.add("hidden")));
