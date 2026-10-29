@@ -200,13 +200,10 @@
       <div class="modal-heading"><div><p class="eyebrow">BACKUP & ACCOUNT</p><h2 id="accountTitle">Account and sync</h2></div><button class="close-button" data-close-account aria-label="Close">×</button></div>
       <div class="sync-status-card"><span class="sync-icon">☁</span><div><strong id="syncHeadline">Offline-first storage</strong><p id="syncDescription">Your entries are saved on this device. Configure Supabase to sign in and sync across devices.</p></div></div>
       <div id="accountSignedOut">
-        <div class="auth-tabs"><button class="selected" data-auth-mode="login">Sign in</button><button data-auth-mode="signup">Create account</button></div>
         <form id="authForm">
           <label class="field-label">Email<input id="authEmail" type="email" autocomplete="email" required placeholder="you@example.com"></label>
-          <label class="field-label">Password<input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="At least 8 characters"></label>
+          <label class="field-label">Password<input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="Enter your password"></label>
           <button id="authSubmit" type="submit" class="primary-button full-width">Sign in</button>
-          <div class="auth-divider"><span>or</span></div>
-          <button id="googleSignIn" type="button" class="secondary-button full-width">Continue with Google</button>
           <p id="authMessage" class="helper-note"></p>
         </form>
       </div>
