@@ -204,3 +204,11 @@ body.auth-required #accountModal [data-close-account],
 body.auth-required #accountModal .account-actions{display:none!important}
 body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
 @media(max-width:420px){body.auth-required #accountModal{padding:14px}body.auth-required #accountModal .modal-sheet{padding:20px 17px}}
+
+/* Compact header actions; notification icon first, account icon second */
+.topbar{justify-content:space-between;gap:14px}
+.topbar-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.topbar-actions .icon-button{flex:0 0 42px;margin:0}
+/* Keep backup/restore wiring in the DOM but hide the controls from the personal-use UI */
+.account-actions{display:none!important}
+@media(max-width:420px){.topbar{padding-left:16px;padding-right:16px;gap:10px}.brand{gap:8px}.topbar-actions{gap:5px}.topbar-actions .icon-button{width:38px;height:38px;flex-basis:38px;border-radius:12px}}
