@@ -191,3 +191,15 @@
 .debt-records-heading{margin:8px 0 4px}
 .debt-records-heading h3{font-size:13px;margin:0}
 @media(max-width:350px){.debt-summary-cards{gap:7px}.debt-summary-card{padding:11px 9px}.debt-summary-top{gap:6px}.debt-summary-label{font-size:10px}.debt-summary-icon{width:28px;height:28px}}
+
+/* Require authentication before revealing the ledger */
+body.auth-required{overflow:hidden}
+body.auth-required .app-shell{visibility:hidden;pointer-events:none}
+body.auth-required #accountModal{display:flex!important;align-items:center;justify-content:center;padding:20px;z-index:100}
+body.auth-required #accountModal .modal-backdrop{background:var(--paper);backdrop-filter:none}
+body.auth-required #accountModal .modal-sheet{width:min(100%,480px);max-height:92dvh;border-radius:24px;padding:24px;box-shadow:var(--shadow)}
+body.auth-required #accountModal .sheet-handle,
+body.auth-required #accountModal [data-close-account],
+body.auth-required #accountModal .account-actions{display:none!important}
+body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
+@media(max-width:420px){body.auth-required #accountModal{padding:14px}body.auth-required #accountModal .modal-sheet{padding:20px 17px}}
