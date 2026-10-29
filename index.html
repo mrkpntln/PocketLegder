@@ -117,15 +117,18 @@
             <div class="bill-summary-card"><small>Due in 7 days</small><strong id="billDueCount">0</strong></div>
             <div class="bill-summary-card"><small>Paid this month</small><strong id="billPaidTotal">₱0.00</strong></div>
           </div>
+          <div class="bill-view-switch" role="group" aria-label="Bill views">
+            <button type="button" class="bill-view-button selected" data-bill-view="due" aria-pressed="true">Bills to pay</button>
+            <button type="button" class="bill-view-button" data-bill-view="history" aria-pressed="false">Paid history</button>
+          </div>
           <div class="bill-filter-panel">
             <input id="billSearch" type="search" placeholder="Search bills, categories, notes…" aria-label="Search bills">
-            <div class="bill-filter-row">
-              <select id="billStatusFilter" aria-label="Filter bills by status"><option value="unpaid" selected>Unpaid</option><option value="all">All statuses</option><option value="overdue">Overdue</option><option value="paid">Paid</option></select>
-              <input id="billMonthFilter" type="month" aria-label="Filter bills by due month">
-              <button class="mini-action" id="clearBillFilters" type="button">Clear</button>
+            <div class="bill-filter-row bill-filter-row-single">
+              <button class="mini-action" id="clearBillFilters" type="button">Clear search</button>
             </div>
           </div>
-          <div class="bill-history-summary"><span>Payments recorded in <strong id="billHistoryMonth">this month</strong></span><strong id="billHistoryTotal">₱0.00</strong></div>
+          <div class="bill-history-summary hidden" id="billHistorySummary"><span>Payments recorded in <strong id="billHistoryMonth">this month</strong></span><strong id="billHistoryTotal">₱0.00</strong></div>
+          <p class="panel-subtitle" id="billViewHint">Unpaid, overdue, partially paid, and upcoming bills.</p>
           <div id="billsList" class="plan-list"></div>
           
         </section>
