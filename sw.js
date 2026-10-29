@@ -1,4 +1,4 @@
-const CACHE_NAME = "pocketledger-shell-v7";
+const CACHE_NAME = "pocketledger-shell-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
