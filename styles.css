@@ -195,7 +195,8 @@
 /* Require authentication before revealing the ledger */
 body.auth-required{overflow:hidden}
 body.auth-required .app-shell{visibility:hidden;pointer-events:none}
-body.auth-required #accountModal{display:flex!important;align-items:center;justify-content:center;padding:20px;z-index:100}
+body.auth-required #accountModal{display:flex!important;visibility:visible!important;align-items:center;justify-content:center;padding:20px;z-index:100}
+body.auth-required #accountModal *{visibility:visible}
 body.auth-required #accountModal .modal-backdrop{background:var(--paper);backdrop-filter:none}
 body.auth-required #accountModal .modal-sheet{width:min(100%,480px);max-height:92dvh;border-radius:24px;padding:24px;box-shadow:var(--shadow)}
 body.auth-required #accountModal .sheet-handle,
