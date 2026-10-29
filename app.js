@@ -291,15 +291,29 @@
     $("planFormModal").classList.remove("hidden");
   }
   function closePlanForm(){$("planFormModal").classList.add("hidden");}
-  function submitPlanForm(event){
+  async function submitPlanForm(event){
     event.preventDefault();
     const id=$("planFormId").value,kind=$("planFormKind").value,title=$("planTitleInput").value.trim(),date=$("planDateInput").value,amount=Number($("planAmountInput").value||0);
     if(!title||!date||!Number.isFinite(amount)||amount<0||(kind!=="activity"&&amount<=0)){setToast("Check the required fields.");return;}
     const details=kind==="debt"?$("planDebtInput").value:$("planDetailsInput").value.trim();
     const fields={kind,title,date,amount,details};
     if(kind==="bill"){fields.billCategory=$("planCategoryInput").value;fields.recurrence=$("planRecurrenceInput").value;fields.reminderDays=Number($("planReminderInput").value||0);}
-    if(id){const item=state.planItems.find(x=>x.id===id);if(item){Object.assign(item,fields);savePlanItems();renderAll();renderNotifications();setToast("Updated.");}}
-    else savePlanItem({...fields,...(kind==="bill"?{paidAmount:0,payments:[],receiptName:"",receiptData:""}:{})});
+    if(id){
+      const item=state.planItems.find(x=>x.id===id);
+      if(item){
+        Object.assign(item,fields);
+        if(kind==="debt"&&item.debtPrincipalTransactionId){
+          const principal=state.transactions.find(t=>String(t.id)===String(item.debtPrincipalTransactionId));
+          if(principal){principal.amount=amount;principal.type=details==="collect"?"expense":"income";principal.updated_at=new Date().toISOString();await localPut(principal);}
+        }
+        savePlanItems();renderAll();renderNotifications();if(state.user&&navigator.onLine)syncNow();setToast("Updated.");
+      }
+    } else if(kind==="debt"){
+      const item={id:uid(),done:false,created_at:new Date().toISOString(),...fields};
+      const now=new Date().toISOString(),isCollect=details==="collect";
+      const tx={id:uid(),type:isCollect?"expense":"income",amount,date,category:isCollect?"Other expense":"Other income",note:`${isCollect?"Money lent":"Money borrowed"}: ${title}`,created_at:now,updated_at:now,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",debt_id:item.id,debt_principal:true};
+      item.debtPrincipalTransactionId=tx.id;await localPut(tx);state.transactions.push(tx);state.planItems.push(item);savePlanItems();renderAll();renderNotifications();if(state.user&&navigator.onLine)syncNow();setToast(isCollect?"Money lent and expense recorded.":"Money borrowed and income recorded.");
+    } else savePlanItem({...fields,...(kind==="bill"?{paidAmount:0,payments:[],receiptName:"",receiptData:""}:{})});
     closePlanForm();
   }
   function billRemaining(item){return Math.max(0,Number(item.amount||0)-Number(item.paidAmount||0));}
@@ -344,7 +358,11 @@
     const item=state.planItems.find(x=>x.id===id);if(!item||item.done)return;
     if(item.kind==="debt"){
       const isCollect=String(item.details||"owe").toLowerCase()==="collect",now=new Date().toISOString();
-      const tx={id:uid(),type:isCollect?"income":"expense",amount:Number(item.amount||0),category:isCollect?"Other income":"Other expense",note:`${isCollect?"Utang collected":"Utang repayment"}: ${item.title}`,date:todayKey(),created_at:now,updated_at:now,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",debt_id:item.id};
+      if(!item.debtPrincipalTransactionId){
+        const principal={id:uid(),type:isCollect?"expense":"income",amount:Number(item.amount||0),category:isCollect?"Other expense":"Other income",note:`${isCollect?"Money lent":"Money borrowed"}: ${item.title}`,date:item.date||todayKey(),created_at:item.created_at||now,updated_at:now,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",debt_id:item.id,debt_principal:true};
+        item.debtPrincipalTransactionId=principal.id;await localPut(principal);state.transactions.push(principal);
+      }
+      const tx={id:uid(),type:isCollect?"income":"expense",amount:Number(item.amount||0),category:isCollect?"Other income":"Other expense",note:`${isCollect?"Utang collected":"Utang repayment"}: ${item.title}`,date:todayKey(),created_at:now,updated_at:now,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",debt_id:item.id,debt_settlement:true};
       await localPut(tx);state.transactions.push(tx);item.settlementTransactionId=tx.id;item.settledAt=now;
     }
     item.done=true;savePlanItems();renderAll();renderNotifications();if(state.user&&navigator.onLine)syncNow();
@@ -377,9 +395,11 @@
     if(!fromNotification){
       if(item.kind==="bill"){
         if(billRemaining(item)>0.005)actions.push(`<button class="primary-button full-width" data-pay-bill="${escapeHtml(item.id)}">Record payment</button>`);
-        actions.push(`<button class="secondary-button full-width" data-bill-history="${escapeHtml(item.id)}">Payment history</button>`);
-        if(!billIsPaid(item))actions.push(`<button class="secondary-button full-width" data-edit-bill="${escapeHtml(item.id)}">Edit</button>`);
-        actions.push(`<button class="secondary-button full-width" data-attach-receipt="${escapeHtml(item.id)}">${item.receiptData?"Replace receipt":"Attach receipt"}</button>`);
+        if(!billIsPaid(item)){
+          actions.push(`<button class="secondary-button full-width" data-bill-history="${escapeHtml(item.id)}">Payment history</button>`);
+          actions.push(`<button class="secondary-button full-width" data-edit-bill="${escapeHtml(item.id)}">Edit</button>`);
+          actions.push(`<button class="secondary-button full-width" data-attach-receipt="${escapeHtml(item.id)}">${item.receiptData?"Replace receipt":"Attach receipt"}</button>`);
+        }
       } else {
         if(!item.done)actions.push(`<button class="primary-button full-width" data-complete-plan="${escapeHtml(item.id)}">${item.kind==="debt"?(String(item.details||"owe").toLowerCase()==="collect"?"Record money received":"Record debt payment"):"Mark as done"}</button>`);
         if(item.kind==="debt"&&!item.done)actions.push(`<button class="secondary-button full-width" data-edit-plan="${escapeHtml(item.id)}">Edit</button>`);
