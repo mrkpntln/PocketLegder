@@ -724,7 +724,7 @@
       const openPlanTab=e.target.closest("[data-open-plan-tab]");if(openPlanTab){setPlanTab(openPlanTab.dataset.openPlanTab);return;}
       const openPlan=e.target.closest("[data-open-plan]");if(openPlan){showPlanDetail(openPlan.dataset.openPlan,{fromNotification:openPlan.dataset.openPlanFromNotification==="true"});return;}
       const editPlan=e.target.closest("[data-edit-plan]");if(editPlan){const item=state.planItems.find(x=>x.id===editPlan.dataset.editPlan);if(item){$("planDetailModal").classList.add("hidden");openPlanForm(item.kind,item);}return;}
-      const done=e.target.closest("[data-complete-plan]");if(done){togglePlanComplete(done.dataset.completePlan);showPlanDetail(done.dataset.completePlan);return;}
+      const done=e.target.closest("[data-complete-plan]");if(done){const id=done.dataset.completePlan;togglePlanComplete(id).then(()=>showPlanDetail(id));return;}
       const removePlan=e.target.closest("[data-delete-plan]");if(removePlan){deletePlanItem(removePlan.dataset.deletePlan);return;}
       const pay=e.target.closest("[data-pay-bill]");if(pay){payBill(pay.dataset.payBill);return;}
       const cancelPayment=e.target.closest("[data-cancel-payment]");if(cancelPayment){showPlanDetail(cancelPayment.dataset.cancelPayment);return;}
