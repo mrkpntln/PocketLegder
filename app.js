@@ -710,6 +710,51 @@
       setToast("Sync failed. Local data is still saved on this device.");
     }finally{state.syncing=false;updateAccountUI();}
   }
+  async function resetTestData() {
+    if(!state.supabase||!state.user){setToast("Sign in first to reset this account's cloud data.");return;}
+    if(!navigator.onLine){setToast("Connect to the internet before resetting cloud data.");return;}
+    if(state.syncing){setToast("Wait for syncing to finish, then try again.");return;}
+    const approved=confirm("RESET ALL TEST DATA for "+(state.user.email||"this account")+"? This clears transactions, bills, debts, activities and payment records on this device and in Supabase. This cannot be undone. Your login and custom categories will remain.");
+    if(!approved)return;
+    const button=$("resetTestData");if(button)button.disabled=true;
+    try{
+      const userId=state.user.id, now=new Date().toISOString();
+      const localTransactions=await localGetAll();
+      const localPlanIds=state.planItems.map(item=>String(item.id));
+      const localTxIds=localTransactions.map(tx=>String(tx.id));
+      const [remoteTx,remotePlans]=await Promise.all([
+        state.supabase.from("ledger_transactions").select("client_id").eq("user_id",userId),
+        state.supabase.from("plan_items").select("client_id").eq("user_id",userId)
+      ]);
+      if(remoteTx.error)throw remoteTx.error;
+      if(remotePlans.error)throw remotePlans.error;
+      const txIds=[...new Set([...localTxIds,...(remoteTx.data||[]).map(row=>String(row.client_id))])];
+      const planIds=[...new Set([...localPlanIds,...(remotePlans.data||[]).map(row=>String(row.client_id))])];
+      const [txUpdate,planUpdate,paymentUpdate]=await Promise.all([
+        state.supabase.from("ledger_transactions").update({data:{},deleted_at:now,updated_at:now}).eq("user_id",userId),
+        state.supabase.from("plan_items").update({data:{},deleted_at:now,updated_at:now}).eq("user_id",userId),
+        state.supabase.from("payment_history").update({data:{},deleted_at:now,updated_at:now}).eq("user_id",userId)
+      ]);
+      if(txUpdate.error)throw txUpdate.error;
+      if(planUpdate.error)throw planUpdate.error;
+      if(paymentUpdate.error)throw paymentUpdate.error;
+      const meta=readMeta(), old=meta.syncTombstones||{};
+      saveMeta({syncTombstones:{
+        ...old,
+        ledger_transactions:[...new Set([...(old.ledger_transactions||[]),...txIds])],
+        plan_items:[...new Set([...(old.plan_items||[]),...planIds])]
+      },planItems:[]});
+      for(const tx of await localGetAll())await localDelete(tx.id);
+      state.transactions=[];
+      state.planItems=[];
+      renderAll();
+      $("accountModal").classList.add("hidden");
+      setToast("Test data reset. Total balance is back to zero.");
+    }catch(err){
+      console.error("Reset test data failed:",err);
+      setToast("Reset failed: "+(err.message||"Please check your connection and try again."));
+    }finally{if(button)button.disabled=false;}
+  }
   async function signOut() {
     if(!state.supabase)return;
     const {error}=await state.supabase.auth.signOut();
@@ -729,7 +774,7 @@
     document.querySelectorAll("[data-close-notifications]").forEach(b=>b.addEventListener("click",()=>$("notificationModal").classList.add("hidden")));
     document.querySelectorAll("[data-close-account]").forEach(b=>b.addEventListener("click",()=>$("accountModal").classList.add("hidden")));
     $("authForm").addEventListener("submit",submitAuth);
-    $("syncNow").addEventListener("click",syncNow);$("signOut").addEventListener("click",signOut);
+    $("syncNow").addEventListener("click",syncNow);$("resetTestData").addEventListener("click",resetTestData);$("signOut").addEventListener("click",signOut);
     $("backupJson").addEventListener("click",backupJson);$("restoreJson").addEventListener("change",e=>{if(e.target.files?.[0])restoreJson(e.target.files[0]);e.target.value="";});
     $("monthPicker").addEventListener("change",e=>{state.selectedMonth=e.target.value||monthKey(new Date());renderDashboard();});
     $("reportMonth").value=state.selectedMonth;$("reportMonth").addEventListener("change",renderReports);
@@ -746,6 +791,15 @@
     $("prevPlanMonth").addEventListener("click",()=>changePlanMonth(-1));
     $("nextPlanMonth").addEventListener("click",()=>changePlanMonth(1));
     $("calendarGrid").addEventListener("click",e=>{const day=e.target.closest("[data-calendar-date]");if(day)openPlanForm("activity",null,day.dataset.calendarDate);});
+    let calendarTouchStart=null;
+    $("calendarGrid").addEventListener("touchstart",e=>{const touch=e.changedTouches?.[0];if(touch)calendarTouchStart={x:touch.clientX,y:touch.clientY};},{passive:true});
+    $("calendarGrid").addEventListener("touchend",e=>{
+      if(!calendarTouchStart)return;
+      const touch=e.changedTouches?.[0],start=calendarTouchStart;calendarTouchStart=null;if(!touch)return;
+      const dx=touch.clientX-start.x,dy=touch.clientY-start.y;
+      if(Math.abs(dx)<48||Math.abs(dx)<Math.abs(dy)*1.25)return;
+      changePlanMonth(dx<0?1:-1);
+    },{passive:true});
     $("planForm").addEventListener("submit",submitPlanForm);
     document.querySelectorAll("[data-close-plan-form]").forEach(b=>b.addEventListener("click",closePlanForm));
     document.querySelectorAll("[data-close-plan-detail]").forEach(b=>b.addEventListener("click",()=>$("planDetailModal").classList.add("hidden")));
