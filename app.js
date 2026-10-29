@@ -490,19 +490,53 @@
     }catch(e){setToast(e.message||"Could not restore that backup.");}
   }
 
-  function initSupabase() {
-    if(!SUPABASE_URL||!SUPABASE_ANON_KEY||!window.supabase?.createClient) return;
-    state.supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
-      auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
-    });
-    state.supabase.auth.getSession().then(({data})=>{
+  async function initSupabase() {
+    if(!SUPABASE_URL||!SUPABASE_ANON_KEY) {
+      updateAccountUI();
+      $("authMessage").textContent="Supabase configuration is missing.";
+      return;
+    }
+    if(!window.supabase?.createClient) {
+      const sources=[
+        "https://unpkg.com/@supabase/supabase-js@2",
+        "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+      ];
+      for(const src of sources) {
+        try {
+          await new Promise((resolve,reject)=>{
+            const script=document.createElement("script");
+            script.src=src; script.async=true;
+            script.onload=()=>window.supabase?.createClient?resolve():reject(new Error("Supabase library did not initialize."));
+            script.onerror=()=>reject(new Error("Could not load "+new URL(src).hostname));
+            document.head.appendChild(script);
+          });
+          if(window.supabase?.createClient) break;
+        } catch(err) { console.warn("Supabase library fallback failed:",err.message); }
+      }
+    }
+    if(!window.supabase?.createClient) {
+      updateAccountUI();
+      $("authMessage").textContent="Could not load Supabase. Check your internet connection or try another network, then reload.";
+      return;
+    }
+    try {
+      state.supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+        auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+      });
+      updateAccountUI();
+      const {data,error}=await state.supabase.auth.getSession();
+      if(error) throw error;
       state.user=data.session?.user||null;updateAccountUI();
+      state.supabase.auth.onAuthStateChange((_event,session)=>{
+        state.user=session?.user||null;updateAccountUI();
+        if(state.user&&navigator.onLine) setTimeout(()=>syncNow(),0);
+      });
       if(state.user&&navigator.onLine)syncNow();
-    });
-    state.supabase.auth.onAuthStateChange((_event,session)=>{
-      state.user=session?.user||null;updateAccountUI();
-      if(state.user&&navigator.onLine) setTimeout(()=>syncNow(),0);
-    });
+    } catch(err) {
+      console.error("Supabase initialization failed:",err);
+      state.supabase=null;updateAccountUI();
+      $("authMessage").textContent="Could not connect to Supabase. Please reload and try again.";
+    }
   }
   function updateAccountUI() {
     const wasAuthRequired=document.body.classList.contains("auth-required");
