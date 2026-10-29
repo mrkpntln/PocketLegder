@@ -484,12 +484,32 @@
     const items=upcomingItems();const badge=$("notificationBadge");if(badge){badge.textContent=String(items.length);badge.classList.toggle("hidden",items.length===0);}
     const list=$("notificationsList");if(list)list.innerHTML=items.length?items.map(i=>{const isBill=i.kind==="bill",due=i.date===todayKey()?"Today":i.date<todayKey()?"Overdue":new Date(i.date+"T12:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});const status=i.date<todayKey()?"Overdue":i.date===todayKey()?"Due today":"Upcoming";return `<button type="button" class="notification-item" data-open-plan="${escapeHtml(i.id)}" data-open-plan-from-notification="true"><span class="notification-item-mark ${isBill?"bill":"activity"}"></span><span class="notification-item-copy"><strong>${escapeHtml(i.title)}</strong><small>${escapeHtml(isBill?(i.billCategory||"Bill"):i.kind==="debt"?"Utang":"Activity")} · ${escapeHtml(due)}</small></span><span class="notification-item-side"><strong>${isBill?money(billRemaining(i)):""}</strong><small>${status}</small></span></button>`;}).join(""):'<div class="notification-empty">No upcoming notifications</div>';
   }
+  async function showSystemNotification(title, body, tag) {
+    if(!("Notification" in window)||Notification.permission!=="granted")return false;
+    try { const reg=await navigator.serviceWorker?.getRegistration(); if(reg?.active){await reg.showNotification(title,{body,icon:"./icon-192.png",badge:"./icon-192.png",tag});return true;}
+      if(!/Android|iPhone|iPad/i.test(navigator.userAgent)){new Notification(title,{body,tag});return true;}
+    } catch(err){console.warn("Notification failed",err);} return false;
+  }
+  async function enableSystemNotifications(){
+    const status=$("notificationSettingsStatus");
+    if(!("Notification" in window)){if(status)status.textContent="Notifications are not supported in this browser.";return;}
+    try { const p=Notification.permission==="granted"?"granted":await Notification.requestPermission();
+      if(p!=="granted"){if(status)status.textContent="Allow notifications in Chrome site settings.";return;}
+      if("serviceWorker" in navigator)await navigator.serviceWorker.ready;
+      await showSystemNotification("PocketLedger notifications enabled","Bill, budget and daily reminders are configured.","pocketledger-enabled");
+      if(status)status.textContent="Permission granted. Send a test notification to check your phone.";
+    } catch(e){if(status)status.textContent="Could not enable notifications. Check Chrome site permissions.";}
+  }
+  function renderNotificationSettings(){const m=readMeta();if($("dailyReminderEnabled"))$("dailyReminderEnabled").checked=m.dailyReminderEnabled!==false;if($("notificationSettingsStatus")&&"Notification" in window)$("notificationSettingsStatus").textContent="Permission: "+Notification.permission+". Monthly budget: "+money(m.monthlyBudgetLimit||0);}
+  function saveNotificationSettings(){saveMeta({dailyReminderEnabled:!!$("dailyReminderEnabled")?.checked});const s=$("notificationSettingsStatus");if(s)s.textContent="Reminder settings saved on this device. Daily reminder is set for 8:00 PM.";checkDueNotifications();}
+  function setMonthlyBudget(){const current=Number(readMeta().monthlyBudgetLimit||0);const value=prompt("Enter your monthly expense budget in PHP (0 disables budget alerts):",String(current));if(value===null)return;const amount=Number(value);if(!Number.isFinite(amount)||amount<0){setToast("Enter a valid budget amount.");return;}saveMeta({monthlyBudgetLimit:amount});renderNotificationSettings();checkDueNotifications();setToast("Monthly budget saved.");}
   function checkDueNotifications() {
-    renderNotifications();
-    if(!("Notification" in window)||Notification.permission!=="granted")return;
-    const today=todayKey();const key="pocketledger-notified-date";const notified=JSON.parse(localStorage.getItem(key)||"{}");
-    state.planItems.filter(i=>{if(i.kind==="bill"?billIsPaid(i):i.done)return false;const days=Math.round((new Date(i.date+"T12:00:00")-new Date(today+"T12:00:00"))/86400000);const lead=i.kind==="bill"?Number(i.reminderDays||0):0;return days<=0||days<=lead;}).forEach(i=>{const stamp=`${today}:${i.date}`;if(notified[i.id]===stamp)return;try{const days=Math.round((new Date(i.date+"T12:00:00")-new Date(today+"T12:00:00"))/86400000);const heading=days<0?"Overdue: "+i.title:days===0?"Due today: "+i.title:"Upcoming: "+i.title;new Notification(heading,{body:i.kind==="activity"?`Scheduled activity · ${i.date}`:`${money(billRemaining(i))} · ${i.kind==="bill"?"Bill due "+i.date:"Utang due "+i.date}`});notified[i.id]=stamp;}catch{}});
-    localStorage.setItem(key,JSON.stringify(notified));
+    renderNotifications(); if(!("Notification" in window)||Notification.permission!=="granted")return;
+    const today=todayKey(),now=new Date(),month=monthKey(now);let notified={};try{notified=JSON.parse(localStorage.getItem("pocketledger-notified-date")||"{}");}catch{}
+    state.planItems.filter(i=>{if(i.kind==="bill"?billIsPaid(i):i.done)return false;const days=Math.round((new Date(i.date+"T12:00:00")-new Date(today+"T12:00:00"))/86400000);const lead=i.kind==="bill"?Number(i.reminderDays||0):0;return days<=0||days<=lead;}).forEach(i=>{const stamp=today+":"+i.date;if(notified[i.id]===stamp)return;const days=Math.round((new Date(i.date+"T12:00:00")-new Date(today+"T12:00:00"))/86400000);const heading=days<0?"Overdue: "+i.title:days===0?"Due today: "+i.title:"Upcoming: "+i.title;const body=i.kind==="activity"?"Scheduled activity · "+i.date:money(i.kind==="bill"?billRemaining(i):i.amount||0)+" · "+(i.kind==="bill"?"Bill due ":"Utang due ")+i.date;showSystemNotification(heading,body,"plan-"+i.id);notified[i.id]=stamp;});
+    if(readMeta().dailyReminderEnabled!==false&&now.getHours()===20&&!notified["daily-reminder-"+today]){showSystemNotification("Time to log today’s expenses","Take a moment to record today’s income and expenses.","daily-expense-reminder");notified["daily-reminder-"+today]=true;}
+    const budget=Number(readMeta().monthlyBudgetLimit||0);if(budget>0){const spent=state.transactions.filter(t=>t.type==="expense"&&String(t.date||"").startsWith(month)).reduce((n,t)=>n+Number(t.amount||0),0);const level=spent>=budget?"100":spent>=budget*.8?"80":"";const key="budget-alert-"+month;if(level&&notified[key]!==level){showSystemNotification(level==="100"?"Monthly budget reached":"80% of monthly budget used","Expenses: "+money(spent)+" of "+money(budget),"budget-"+month+"-"+level);notified[key]=level;}}
+    localStorage.setItem("pocketledger-notified-date",JSON.stringify(notified));
   }
 
   function renderCategories() {
@@ -768,7 +788,11 @@
     $("calculator").addEventListener("click",e=>{const b=e.target.closest("[data-key]");if(b)calcKey(b.dataset.key);});
     $("transactionForm").addEventListener("submit",saveTransaction);
     $("accountButton").addEventListener("click",()=>{$("accountModal").classList.remove("hidden");updateAccountUI();});
-    $("notificationButton").addEventListener("click",()=>{$("notificationModal").classList.remove("hidden");renderNotifications();});
+    $("notificationButton").addEventListener("click",()=>{$("notificationModal").classList.remove("hidden");renderNotifications();renderNotificationSettings();});
+    $("enableSystemNotifications").addEventListener("click",enableSystemNotifications);
+    $("setMonthlyBudget").addEventListener("click",setMonthlyBudget);
+    $("saveNotificationSettings").addEventListener("click",saveNotificationSettings);
+    $("testSystemNotification").addEventListener("click",async()=>{await enableSystemNotifications();const ok=await showSystemNotification("PocketLedger test notification","If you see this, system notifications work.","pocketledger-test");const s=$("notificationSettingsStatus");if(s)s.textContent=ok?"Test notification requested. Check your phone notification shade.":"Test could not be sent. Check Chrome permissions.";});
     document.querySelectorAll("[data-close-notifications]").forEach(b=>b.addEventListener("click",()=>$("notificationModal").classList.add("hidden")));
     document.querySelectorAll("[data-close-account]").forEach(b=>b.addEventListener("click",()=>$("accountModal").classList.add("hidden")));
     $("authForm").addEventListener("submit",submitAuth);
@@ -832,7 +856,7 @@
     $("transactionDate").value=todayKey();
     try{state.transactions=await localGetAll();}catch(e){console.error(e);setToast("Local storage could not start in this browser.");}
     const meta=readMeta();if(meta.customCategories)state.customCategories=meta.customCategories;if(Array.isArray(meta.planItems))state.planItems=meta.planItems;
-    initEvents();initSupabase();renderAll();updateAccountUI();checkDueNotifications();
+    initEvents();initSupabase();renderAll();updateAccountUI();renderNotificationSettings();checkDueNotifications();
     if("serviceWorker" in navigator && location.protocol!=="file:"){
       navigator.serviceWorker.register("./sw.js").catch(err=>console.warn("Service worker registration failed:",err));
     }
