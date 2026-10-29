@@ -224,12 +224,11 @@
   function sum(list,type) { return list.filter(t => !type || t.type === type).reduce((a,t) => a + Number(t.amount),0); }
   function renderDashboard() {
     const totalIncome=sum(state.transactions,"income"), totalExpense=sum(state.transactions,"expense");
-    const debtAdjustment=state.planItems.filter(i=>i.kind==="debt").reduce((net,i)=>{
-      const mode=String(i.details||"owe").toLowerCase();
-      if(mode==="collect") return net+(i.done?Number(i.amount||0):0);
-      return net-Number(i.amount||0);
+    const legacySettledDebtAdjustment=state.planItems.filter(i=>i.kind==="debt"&&i.done&&!i.settlementTransactionId).reduce((net,i)=>{
+      const mode=String(i.details||"").toLowerCase();
+      return net+(mode==="collect"?Number(i.amount||0):-Number(i.amount||0));
     },0);
-    $("balanceAmount").textContent=money(totalIncome-totalExpense+debtAdjustment); $("incomeTotal").textContent=money(totalIncome); $("expenseTotal").textContent=money(totalExpense);
+    $("balanceAmount").textContent=money(totalIncome-totalExpense+legacySettledDebtAdjustment); $("incomeTotal").textContent=money(totalIncome); $("expenseTotal").textContent=money(totalExpense);
     $("monthPicker").value=state.selectedMonth;
     const monthTx=state.transactions.filter(t=>t.date?.startsWith(state.selectedMonth));
     const mi=sum(monthTx,"income"), me=sum(monthTx,"expense"), max=Math.max(mi,me,1);
@@ -310,8 +309,9 @@
   function nextRecurringDate(date, recurrence){const base=new Date(date+"T12:00:00");if(recurrence==="weekly")base.setDate(base.getDate()+7);else if(recurrence==="monthly"||recurrence==="quarterly"){const day=base.getDate();base.setDate(1);base.setMonth(base.getMonth()+(recurrence==="monthly"?1:3));const lastDay=new Date(base.getFullYear(),base.getMonth()+1,0).getDate();base.setDate(Math.min(day,lastDay));}else if(recurrence==="yearly"){const month=base.getMonth(),day=base.getDate();base.setDate(1);base.setFullYear(base.getFullYear()+1);base.setMonth(month);base.setDate(Math.min(day,new Date(base.getFullYear(),month+1,0).getDate()));}while(dateKey(base)<=todayKey()&&recurrence!=="none"){if(recurrence==="weekly")base.setDate(base.getDate()+7);else if(recurrence==="monthly"||recurrence==="quarterly"){const day=base.getDate();base.setDate(1);base.setMonth(base.getMonth()+(recurrence==="monthly"?1:3));base.setDate(Math.min(day,new Date(base.getFullYear(),base.getMonth()+1,0).getDate()));}else if(recurrence==="yearly")base.setFullYear(base.getFullYear()+1);else break;}return dateKey(base);}
   async function recordBillPayment(item, amount, method, reference) {
     const payment={id:uid(),amount:Number(amount),date:todayKey(),method:method||"Other",reference:reference||"",created_at:new Date().toISOString()};
-    item.payments=Array.isArray(item.payments)?item.payments:[];item.payments.push(payment);item.paidAmount=Number(item.paidAmount||0)+payment.amount;item.done=billRemaining(item)<0.005;
-    const tx={id:uid(),type:"expense",amount:payment.amount,category:"Bills",note:`${item.title} payment${payment.reference?" · Ref "+payment.reference:""}`,date:payment.date,created_at:new Date().toISOString(),updated_at:new Date().toISOString(),user_id:state.user?.id||null,sync_status:state.user?"pending":"local",bill_id:item.id,bill_payment_id:payment.id};
+    item.payments=Array.isArray(item.payments)?item.payments:[];
+    const tx={id:uid(),type:"expense",amount:payment.amount,category:"Bills",note:`${item.title} payment${payment.reference?" · Ref "+payment.reference:""}`,date:payment.date,created_at:payment.created_at,updated_at:payment.created_at,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",bill_id:item.id,bill_payment_id:payment.id};
+    payment.transactionId=tx.id;item.payments.push(payment);item.paidAmount=Number(item.paidAmount||0)+payment.amount;item.done=billRemaining(item)<0.005;
     await localPut(tx);state.transactions.push(tx);savePlanItems();
     if(item.done&&item.recurrence&&item.recurrence!=="none"&&!item.nextGenerated){const next={...item,id:uid(),date:nextRecurringDate(item.date,item.recurrence),paidAmount:0,payments:[],done:false,nextGenerated:false,created_at:new Date().toISOString(),receiptName:"",receiptData:"",sourceBillId:item.id};item.nextGenerated=true;state.planItems.push(next);}
     savePlanItems();renderAll();if(state.user&&navigator.onLine)syncNow();setToast(item.done?"Bill paid and expense recorded.":"Partial payment recorded.");
@@ -324,14 +324,31 @@
     const form=$("billPaymentForm");form.addEventListener("submit",async e=>{e.preventDefault();const submit=form.querySelector('[type="submit"]');if(submit.disabled)return;submit.disabled=true;const fd=new FormData(form),amount=Number(fd.get("amount"));if(!Number.isFinite(amount)||amount<=0||amount>billRemaining(item)+0.005){submit.disabled=false;setToast("Enter a valid payment amount.");return;}await recordBillPayment(item,amount,String(fd.get("method")),String(fd.get("reference")||""));showPlanDetail(id);});
   }
   function showBillHistory(id){const item=state.planItems.find(x=>x.id===id&&x.kind==="bill");if(!item)return;showPlanDetail(id);const history=$("planDetailContent").querySelector(".payment-history");if(history)history.scrollIntoView({behavior:"smooth",block:"center"});}
+  async function deleteBillPayment(billId,paymentId){
+    const item=state.planItems.find(x=>x.id===billId&&x.kind==="bill");if(!item)return;
+    const payment=(item.payments||[]).find(p=>String(p.id)===String(paymentId));if(!payment)return;
+    if(!confirm(`Delete the ${money(payment.amount)} payment recorded on ${payment.date||"this bill"}? The bill balance and Total Balance will be adjusted.`))return;
+    const tx=state.transactions.find(t=>String(t.id)===String(payment.transactionId)||String(t.bill_payment_id)===String(payment.id));
+    if(tx){markSyncDeleted("ledger_transactions",tx.id);await localDelete(tx.id);state.transactions=state.transactions.filter(t=>String(t.id)!==String(tx.id));}
+    item.payments=(item.payments||[]).filter(p=>String(p.id)!==String(paymentId));
+    item.paidAmount=Math.max(0,Number(item.paidAmount||0)-Number(payment.amount||0));item.done=billRemaining(item)<0.005;item.updated_at=new Date().toISOString();
+    savePlanItems();renderAll();showPlanDetail(item.id);setToast("Payment deleted and balances updated.");if(state.user&&navigator.onLine)syncNow();
+  }
   function editBill(id){const item=state.planItems.find(x=>x.id===id&&x.kind==="bill");if(!item)return;$("planDetailModal").classList.add("hidden");openPlanForm("bill",item);}
   function attachBillReceipt(id){const item=state.planItems.find(x=>x.id===id&&x.kind==="bill");if(!item)return;const input=document.createElement("input");input.type="file";input.accept="image/*,.pdf,application/pdf";input.onchange=()=>{const file=input.files?.[0];if(!file)return;if(file.size>500*1024){setToast("For reliable local backup storage, receipt files must be 500 KB or smaller.");return;}const reader=new FileReader();reader.onload=()=>{item.receiptName=file.name;item.receiptData=String(reader.result||"");savePlanItems();renderPlan();setToast("Receipt attached.");};reader.readAsDataURL(file);};input.click();}
   function openBillReceipt(id){const item=state.planItems.find(x=>x.id===id);if(!item?.receiptData)return;const win=window.open();if(!win){setToast("Allow pop-ups to view the receipt.");return;}if(item.receiptData.startsWith("data:application/pdf")){win.document.write(`<title>${escapeHtml(item.receiptName||"Receipt")}</title><iframe src="${item.receiptData}" style="border:0;width:100%;height:100vh"></iframe>`);}else{win.document.write(`<title>${escapeHtml(item.receiptName||"Receipt")}</title><img src="${item.receiptData}" style="max-width:100%;height:auto">`);}}
   function savePlanItem(item) {
     state.planItems.push({id:uid(),done:false,created_at:new Date().toISOString(),...item});savePlanItems();renderAll();checkDueNotifications();setToast("Added to your plan.");
   }
-  function togglePlanComplete(id) {
-    const item=state.planItems.find(x=>x.id===id);if(!item||item.done)return;item.done=true;savePlanItems();renderAll();renderNotifications();setToast("Marked as done.");
+  async function togglePlanComplete(id) {
+    const item=state.planItems.find(x=>x.id===id);if(!item||item.done)return;
+    if(item.kind==="debt"){
+      const isCollect=String(item.details||"owe").toLowerCase()==="collect",now=new Date().toISOString();
+      const tx={id:uid(),type:isCollect?"income":"expense",amount:Number(item.amount||0),category:isCollect?"Other income":"Other expense",note:`${isCollect?"Utang collected":"Utang repayment"}: ${item.title}`,date:todayKey(),created_at:now,updated_at:now,user_id:state.user?.id||null,sync_status:state.user?"pending":"local",debt_id:item.id};
+      await localPut(tx);state.transactions.push(tx);item.settlementTransactionId=tx.id;item.settledAt=now;
+    }
+    item.done=true;savePlanItems();renderAll();renderNotifications();if(state.user&&navigator.onLine)syncNow();
+    setToast(item.kind==="debt"?(String(item.details||"owe").toLowerCase()==="collect"?"Utang collected and income recorded.":"Utang paid and expense recorded."):"Marked as done.");
   }
   function deletePlanItem(id) {
     const item=state.planItems.find(x=>x.id===id);if(!item||!confirm(`Delete “${item.title}”?`))return;
@@ -345,16 +362,30 @@
     const amount=item.kind==="activity"?"":`<strong class="plan-amount">${money(item.kind==="bill"?billRemaining(item):item.amount||0)}</strong>`;
     return `<button type="button" class="plan-item plan-item-clickable ${item.kind==="bill"?`bill-card ${status.toLowerCase()} ${status==="Paid"?"is-done":""}`:""} ${item.done?"is-done":""}" data-open-plan="${escapeHtml(item.id)}"><span class="plan-item-marker ${item.kind}"></span><span class="plan-item-main"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(typeLabel)} · ${escapeHtml(due)}${item.kind==="bill"?` · ${status}`:""}${item.kind==="bill"&&item.recurrence&&item.recurrence!=="none"?` · ${escapeHtml(item.recurrence)}`:""}</small>${item.kind==="bill"?`<span class="bill-progress"><i style="width:${Math.min(100,Number(item.amount)?Number(item.paidAmount||0)/Number(item.amount)*100:0)}%"></i></span>`:""}${item.details&&item.kind!=="debt"?`<small>${escapeHtml(item.details)}</small>`:""}</span>${amount}<span class="plan-chevron" aria-hidden="true">›</span></button>`;
   }
-  function showPlanDetail(id){
+  function showPlanDetail(id, options={}) {
     const item=state.planItems.find(x=>x.id===id);if(!item)return;
+    const fromNotification=!!options.fromNotification;
     const kindLabel={activity:"Activity",bill:item.billCategory||"Bill",debt:(item.details||"owe").toLowerCase()==="collect"?"To collect":"Utang"}[item.kind]||"Plan";
     const due=new Date(item.date+"T12:00:00").toLocaleDateString("en-PH",{weekday:"short",month:"long",day:"numeric",year:"numeric"});
+    const paymentHistory=(item.payments||[]).map(p=>{
+      const paidAt=p.created_at?new Date(p.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}):p.date||"Date unavailable";
+      return `<div class="payment-history-row"><div class="payment-history-info"><strong>${money(p.amount)}</strong><small>${escapeHtml(paidAt)} · ${escapeHtml(p.method||"Other")}</small>${p.reference?`<small>Reference: ${escapeHtml(p.reference)}</small>`:""}</div><div class="payment-history-actions">${item.receiptData?`<button class="tiny-button" data-open-receipt="${escapeHtml(item.id)}">View receipt</button>`:""}<button class="tiny-button danger-action" data-delete-payment="${escapeHtml(item.id)}" data-payment-id="${escapeHtml(p.id)}">Delete</button></div></div>`;
+    }).join("")||'<p class="helper-note">No payments recorded yet.</p>';
     $("planDetailTitle").textContent=item.title;
-    $("planDetailContent").innerHTML=`<div class="detail-summary"><span>${escapeHtml(kindLabel)}</span><strong>${escapeHtml(due)}</strong>${item.kind!=="activity"?`<strong>${money(item.kind==="bill"?billRemaining(item):item.amount||0)}${item.kind==="bill"?" remaining":""}</strong>`:""}${item.details&&item.kind!=="debt"?`<p>${escapeHtml(item.details)}</p>`:""}${item.kind==="bill"?`<div class="bill-progress"><i style="width:${Math.min(100,Number(item.amount)?Number(item.paidAmount||0)/Number(item.amount)*100:0)}%"></i></div><p>Paid ${money(item.paidAmount||0)} of ${money(item.amount)}</p><div class="payment-history">${(item.payments||[]).map(p=>`<div><span>${escapeHtml(p.date)} · ${escapeHtml(p.method||"Other")}</span><strong>${money(p.amount)}</strong></div>`).join("")||""}</div>${item.receiptData?`<button class="secondary-button full-width" data-open-receipt="${escapeHtml(item.id)}">View receipt</button>`:""}`:""}</div>`;
+    $("planDetailContent").innerHTML=`<div class="detail-summary"><span>${escapeHtml(kindLabel)}</span><strong>${escapeHtml(due)}</strong>${item.kind!=="activity"?`<strong>${money(item.kind==="bill"?billRemaining(item):item.amount||0)}${item.kind==="bill"?" remaining":""}</strong>`:""}${item.details&&item.kind!=="debt"?`<p>${escapeHtml(item.details)}</p>`:""}${item.kind==="bill"?`<div class="bill-progress"><i style="width:${Math.min(100,Number(item.amount)?Number(item.paidAmount||0)/Number(item.amount)*100:0)}%"></i></div><p>Paid ${money(item.paidAmount||0)} of ${money(item.amount)}</p><div class="payment-history">${paymentHistory}</div>${item.receiptData&&!(item.payments||[]).length?`<button class="secondary-button full-width" data-open-receipt="${escapeHtml(item.id)}">View receipt</button>`:""}`:""}${item.kind==="debt"&&item.done&&item.settledAt?`<p>Settled ${escapeHtml(new Date(item.settledAt).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}))}</p>`:""}</div>`;
     const actions=[];
-    if(item.kind==="bill"){if(billRemaining(item)>0)actions.push(`<button class="primary-button full-width" data-pay-bill="${escapeHtml(item.id)}">Record payment</button>`);actions.push(`<button class="secondary-button full-width" data-bill-history="${escapeHtml(item.id)}">Payment history</button>`,`<button class="secondary-button full-width" data-edit-bill="${escapeHtml(item.id)}">Edit</button>`,`<button class="secondary-button full-width" data-attach-receipt="${escapeHtml(item.id)}">${item.receiptData?"Replace receipt":"Attach receipt"}</button>`);}
-    else {if(!item.done)actions.push(`<button class="primary-button full-width" data-complete-plan="${escapeHtml(item.id)}">Mark as done</button>`);if(item.kind==="debt"&&!item.done)actions.push(`<button class="secondary-button full-width" data-edit-plan="${escapeHtml(item.id)}">Edit</button>`);}
-    actions.push(`<button class="secondary-button full-width danger-action" data-delete-plan="${escapeHtml(item.id)}">Delete</button>`);
+    if(!fromNotification){
+      if(item.kind==="bill"){
+        if(billRemaining(item)>0.005)actions.push(`<button class="primary-button full-width" data-pay-bill="${escapeHtml(item.id)}">Record payment</button>`);
+        actions.push(`<button class="secondary-button full-width" data-bill-history="${escapeHtml(item.id)}">Payment history</button>`);
+        if(!billIsPaid(item))actions.push(`<button class="secondary-button full-width" data-edit-bill="${escapeHtml(item.id)}">Edit</button>`);
+        actions.push(`<button class="secondary-button full-width" data-attach-receipt="${escapeHtml(item.id)}">${item.receiptData?"Replace receipt":"Attach receipt"}</button>`);
+      } else {
+        if(!item.done)actions.push(`<button class="primary-button full-width" data-complete-plan="${escapeHtml(item.id)}">${item.kind==="debt"?(String(item.details||"owe").toLowerCase()==="collect"?"Record money received":"Record debt payment"):"Mark as done"}</button>`);
+        if(item.kind==="debt"&&!item.done)actions.push(`<button class="secondary-button full-width" data-edit-plan="${escapeHtml(item.id)}">Edit</button>`);
+      }
+      actions.push(`<button class="secondary-button full-width danger-action" data-delete-plan="${escapeHtml(item.id)}">Delete</button>`);
+    }
     $("planDetailActions").innerHTML=actions.join("");$("planDetailModal").classList.remove("hidden");
   }
   function renderPlanOverview() {
@@ -418,7 +449,7 @@
   }
   function renderNotifications() {
     const items=upcomingItems();const badge=$("notificationBadge");if(badge){badge.textContent=String(items.length);badge.classList.toggle("hidden",items.length===0);}
-    const list=$("notificationsList");if(list)list.innerHTML=items.length?items.map(i=>{const isBill=i.kind==="bill",due=i.date===todayKey()?"Today":i.date<todayKey()?"Overdue":new Date(i.date+"T12:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});const status=i.date<todayKey()?"Overdue":i.date===todayKey()?"Due today":"Upcoming";return `<button type="button" class="notification-item" data-open-plan="${escapeHtml(i.id)}"><span class="notification-item-mark ${isBill?"bill":"activity"}"></span><span class="notification-item-copy"><strong>${escapeHtml(i.title)}</strong><small>${escapeHtml(isBill?(i.billCategory||"Bill"):i.kind==="debt"?"Utang":"Activity")} · ${escapeHtml(due)}</small></span><span class="notification-item-side"><strong>${isBill?money(billRemaining(i)):""}</strong><small>${status}</small></span></button>`;}).join(""):'<div class="notification-empty">No upcoming notifications</div>';
+    const list=$("notificationsList");if(list)list.innerHTML=items.length?items.map(i=>{const isBill=i.kind==="bill",due=i.date===todayKey()?"Today":i.date<todayKey()?"Overdue":new Date(i.date+"T12:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"});const status=i.date<todayKey()?"Overdue":i.date===todayKey()?"Due today":"Upcoming";return `<button type="button" class="notification-item" data-open-plan="${escapeHtml(i.id)}" data-open-plan-from-notification="true"><span class="notification-item-mark ${isBill?"bill":"activity"}"></span><span class="notification-item-copy"><strong>${escapeHtml(i.title)}</strong><small>${escapeHtml(isBill?(i.billCategory||"Bill"):i.kind==="debt"?"Utang":"Activity")} · ${escapeHtml(due)}</small></span><span class="notification-item-side"><strong>${isBill?money(billRemaining(i)):""}</strong><small>${status}</small></span></button>`;}).join(""):'<div class="notification-empty">No upcoming notifications</div>';
   }
   function checkDueNotifications() {
     renderNotifications();
@@ -691,7 +722,7 @@
       const planTab=e.target.closest("[data-plan-tab]");if(planTab){setPlanTab(planTab.dataset.planTab);return;}
       const debtFilter=e.target.closest("[data-debt-filter]");if(debtFilter){state.debtFilter=debtFilter.dataset.debtFilter;renderPlan();return;}
       const openPlanTab=e.target.closest("[data-open-plan-tab]");if(openPlanTab){setPlanTab(openPlanTab.dataset.openPlanTab);return;}
-      const openPlan=e.target.closest("[data-open-plan]");if(openPlan){showPlanDetail(openPlan.dataset.openPlan);return;}
+      const openPlan=e.target.closest("[data-open-plan]");if(openPlan){showPlanDetail(openPlan.dataset.openPlan,{fromNotification:openPlan.dataset.openPlanFromNotification==="true"});return;}
       const editPlan=e.target.closest("[data-edit-plan]");if(editPlan){const item=state.planItems.find(x=>x.id===editPlan.dataset.editPlan);if(item){$("planDetailModal").classList.add("hidden");openPlanForm(item.kind,item);}return;}
       const done=e.target.closest("[data-complete-plan]");if(done){togglePlanComplete(done.dataset.completePlan);showPlanDetail(done.dataset.completePlan);return;}
       const removePlan=e.target.closest("[data-delete-plan]");if(removePlan){deletePlanItem(removePlan.dataset.deletePlan);return;}
@@ -701,6 +732,7 @@
       const editBillBtn=e.target.closest("[data-edit-bill]");if(editBillBtn){editBill(editBillBtn.dataset.editBill);return;}
       const receipt=e.target.closest("[data-attach-receipt]");if(receipt){attachBillReceipt(receipt.dataset.attachReceipt);return;}
       const viewReceipt=e.target.closest("[data-open-receipt]");if(viewReceipt){openBillReceipt(viewReceipt.dataset.openReceipt);return;}
+      const deletePayment=e.target.closest("[data-delete-payment]");if(deletePayment){deleteBillPayment(deletePayment.dataset.deletePayment,deletePayment.dataset.paymentId);return;}
     });
     window.addEventListener("online",()=>{updateAccountUI();if(state.user)syncNow();});
     window.addEventListener("offline",updateAccountUI);
