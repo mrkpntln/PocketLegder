@@ -717,47 +717,39 @@
     const accountEmail=(state.user.email||"").trim();
     const approved=confirm("RESET ALL TEST DATA for "+(accountEmail||"this account")+"? This clears this account's transactions, bills, debts, activities and payment records in Supabase. Local data on this device will also be cleared. This cannot be undone.");
     if(!approved)return;
-    const typedEmail=prompt("Security check: type the signed-in email exactly to confirm the reset.");
-    if(typedEmail===null||typedEmail.trim().toLowerCase()!==accountEmail.toLowerCase()){setToast("Reset cancelled: email confirmation did not match.");return;}
+    const password=prompt("Re-authentication required. Enter your account password to continue:");
+    if(password===null)return;
+    if(!password){setToast("Reset cancelled: password is required.");return;}
+    const typedPhrase=prompt('Final confirmation: type exactly "RESET MY DATA".');
+    if(typedPhrase===null||typedPhrase.trim()!=="RESET MY DATA"){setToast("Reset cancelled: confirmation phrase did not match.");return;}
     const button=$("resetTestData");if(button)button.disabled=true;
     try{
-      const userId=state.user.id, now=new Date().toISOString();
+      const {data:reauthData,error:reauthError}=await state.supabase.auth.signInWithPassword({email:accountEmail,password});
+      if(reauthError)throw new Error("Password verification failed. No data was changed.");
+      if(!reauthData?.session?.access_token)throw new Error("Could not verify a fresh sign-in. No data was changed.");
+      const userId=state.user.id;
+      if(reauthData.user?.id!==userId)throw new Error("The verified account did not match the current account. No data was changed.");
+      const {data:resetResult,error:resetError}=await state.supabase.functions.invoke("reset-test-data",{body:{confirmation:typedPhrase.trim()}});
+      if(resetError)throw resetError;
+      if(!resetResult?.ok)throw new Error(resetResult?.error||"The secure reset did not complete.");
       const allLocalTransactions=await localGetAll();
-      // Only treat explicitly account-tagged local rows as belonging to this account.
       const localTransactions=allLocalTransactions.filter(tx=>String(tx.user_id||"")===String(userId));
-      const localPlanIds=state.planItems.map(item=>String(item.id));
       const localTxIds=localTransactions.map(tx=>String(tx.id));
-      const [remoteTx,remotePlans]=await Promise.all([
-        state.supabase.from("ledger_transactions").select("client_id").eq("user_id",userId),
-        state.supabase.from("plan_items").select("client_id").eq("user_id",userId)
-      ]);
-      if(remoteTx.error)throw remoteTx.error;
-      if(remotePlans.error)throw remotePlans.error;
-      const txIds=[...new Set([...localTxIds,...(remoteTx.data||[]).map(row=>String(row.client_id))])];
-      const planIds=[...new Set([...localPlanIds,...(remotePlans.data||[]).map(row=>String(row.client_id))])];
-      const [txUpdate,planUpdate,paymentUpdate]=await Promise.all([
-        state.supabase.from("ledger_transactions").update({data:{},deleted_at:now,updated_at:now}).eq("user_id",userId),
-        state.supabase.from("plan_items").update({data:{},deleted_at:now,updated_at:now}).eq("user_id",userId),
-        state.supabase.from("payment_history").update({data:{},deleted_at:now,updated_at:now}).eq("user_id",userId)
-      ]);
-      if(txUpdate.error)throw txUpdate.error;
-      if(planUpdate.error)throw planUpdate.error;
-      if(paymentUpdate.error)throw paymentUpdate.error;
-      const meta=readMeta(), old=meta.syncTombstones||{};
+      const localPlanIds=state.planItems.map(item=>String(item.id));
+      const meta=readMeta(),old=meta.syncTombstones||{};
       saveMeta({syncTombstones:{
         ...old,
-        ledger_transactions:[...new Set([...(old.ledger_transactions||[]),...txIds])],
-        plan_items:[...new Set([...(old.plan_items||[]),...planIds])]
+        ledger_transactions:[...new Set([...(old.ledger_transactions||[]),...localTxIds])],
+        plan_items:[...new Set([...(old.plan_items||[]),...localPlanIds])]
       },planItems:[]});
-      // Never delete untagged or other-account transaction rows from the shared device database.
       for(const tx of localTransactions)await localDelete(tx.id);
       state.transactions=[];
       state.planItems=[];
       renderAll();
       $("accountModal").classList.add("hidden");
-      setToast("Test data reset. Total balance is back to zero.");
+      setToast("Test data reset securely. Total balance is back to zero.");
     }catch(err){
-      console.error("Reset test data failed:",err);
+      console.error("Secure reset failed:",err);
       setToast("Reset failed: "+(err.message||"Please check your connection and try again."));
     }finally{if(button)button.disabled=false;}
   }
