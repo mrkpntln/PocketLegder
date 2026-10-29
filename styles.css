@@ -241,3 +241,12 @@ body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
 .danger-button:disabled{opacity:.55}
 #calendarGrid{touch-action:pan-y;user-select:none;-webkit-user-select:none}
 #calendarGrid .calendar-day{touch-action:pan-y}
+
+
+/* PocketLedger secure destructive-action area */
+.danger-zone{margin:12px 0 16px;padding:12px 14px;border:1px solid rgba(180,55,55,.28);border-radius:14px;background:rgba(180,55,55,.035)}
+.danger-zone summary{cursor:pointer;font-weight:650;font-size:.92rem;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.danger-zone summary::-webkit-details-marker{display:none}
+.danger-zone summary::after{content:"＋";font-size:1.1rem;color:var(--muted,#667085)}
+.danger-zone[open] summary::after{content:"−"}
+.danger-zone .helper-note{margin:12px 0}
