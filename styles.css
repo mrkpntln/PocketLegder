@@ -224,3 +224,14 @@ body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
 
 /* Bills tab: separate bills to pay from paid history. */
 .bill-view-switch{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;margin:12px 0;background:#e9eee7;border-radius:14px}.bill-view-button{min-width:0;border:0;border-radius:10px;background:transparent;color:var(--muted);padding:11px 8px;font:inherit;font-size:12px;font-weight:750;cursor:pointer}.bill-view-button.selected{background:#fff;color:var(--sage-deep);box-shadow:0 2px 8px rgba(25,45,30,.07)}.bill-filter-row-single{display:flex;justify-content:flex-end}.bill-filter-row-single .mini-action{min-width:95px}.bill-history-summary{margin-top:4px}
+
+/* Fix overflowing bill progress bars and add independent vertical scrolling to long record lists. */
+.bill-progress{display:block!important;position:relative;width:100%;max-width:100%;height:5px;min-height:5px;flex:0 0 100%;margin:7px 0 0;overflow:hidden;border-radius:999px;background:#edf0eb;line-height:0;box-sizing:border-box}
+.bill-progress i{display:block!important;position:relative;height:100%;min-height:0;max-width:100%;margin:0;padding:0;border:0;border-radius:999px;background:#7ba782;line-height:0;box-sizing:border-box}
+.plan-item-clickable .plan-item-main{min-width:0;flex:1 1 auto;overflow:hidden}
+.plan-item-clickable .bill-progress{display:block!important}
+/* Keep each long list inside its own scroll area while the app header/navigation remain accessible. */
+.transaction-list,#allTransactions,.plan-list,#calendarItems,#billsList,#debtsList,.plan-overview-upcoming,.notification-list,.breakdown-list,.category-list{max-height:48vh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#b6cfb6 transparent}
+.transaction-list::-webkit-scrollbar,#allTransactions::-webkit-scrollbar,.plan-list::-webkit-scrollbar,#calendarItems::-webkit-scrollbar,#billsList::-webkit-scrollbar,#debtsList::-webkit-scrollbar,.plan-overview-upcoming::-webkit-scrollbar,.notification-list::-webkit-scrollbar,.breakdown-list::-webkit-scrollbar,.category-list::-webkit-scrollbar{width:4px}
+.transaction-list::-webkit-scrollbar-thumb,#allTransactions::-webkit-scrollbar-thumb,.plan-list::-webkit-scrollbar-thumb,#calendarItems::-webkit-scrollbar-thumb,#billsList::-webkit-scrollbar-thumb,#debtsList::-webkit-scrollbar-thumb,.plan-overview-upcoming::-webkit-scrollbar-thumb,.notification-list::-webkit-scrollbar-thumb,.breakdown-list::-webkit-scrollbar-thumb,.category-list::-webkit-scrollbar-thumb{background:#b6cfb6;border-radius:99px}
+@media(max-height:600px){.transaction-list,#allTransactions,.plan-list,#calendarItems,#billsList,#debtsList,.plan-overview-upcoming,.notification-list,.breakdown-list,.category-list{max-height:42vh}}
