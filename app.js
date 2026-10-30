@@ -469,7 +469,7 @@
     if($("debtOweCount"))$("debtOweCount").textContent=`${owed.filter(i=>!i.done).length} active ${owed.filter(i=>!i.done).length===1?"record":"records"}`;
     if($("debtCollectCount"))$("debtCollectCount").textContent=`${collect.filter(i=>!i.done).length} active ${collect.filter(i=>!i.done).length===1?"record":"records"}`;
     document.querySelectorAll("[data-debt-filter]").forEach(b=>{const active=b.dataset.debtFilter===state.debtFilter;b.classList.toggle("selected",active);b.setAttribute("aria-pressed",String(active));});
-    if($("debtListTitle"))$("debtListTitle").textContent=state.debtFilter==="collect"?"Akong kolektahon":"Akong bayran";
+    if($("debtListTitle"))$("debtListTitle").textContent=state.debtFilter==="collect"?"Receivable":"Debt";
     const selectedDebts=state.debtFilter==="collect"?collect:owed;
     renderList("debtsList",selectedDebts,"Walay record sa maong category.");
     renderPlanOverview();
