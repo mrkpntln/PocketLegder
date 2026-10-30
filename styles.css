@@ -250,3 +250,11 @@ body.auth-required #accountModal .sync-status-card{margin-bottom:18px}
 .danger-zone summary::after{content:"＋";font-size:1.1rem;color:var(--muted,#667085)}
 .danger-zone[open] summary::after{content:"−"}
 .danger-zone .helper-note{margin:12px 0}
+
+
+/* PocketLedger: dedicated scroll areas for history and planning lists */
+#allTransactions{max-height:42vh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+#planOverviewUpcoming{max-height:38vh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+#calendarItems{max-height:42vh;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+#allTransactions::-webkit-scrollbar,#planOverviewUpcoming::-webkit-scrollbar,#calendarItems::-webkit-scrollbar{width:4px}
+#allTransactions::-webkit-scrollbar-thumb,#planOverviewUpcoming::-webkit-scrollbar-thumb,#calendarItems::-webkit-scrollbar-thumb{background:#b6cfb6;border-radius:99px}
