@@ -792,7 +792,7 @@
     $("enableSystemNotifications").addEventListener("click",enableSystemNotifications);
     $("setMonthlyBudget").addEventListener("click",setMonthlyBudget);
     $("saveNotificationSettings").addEventListener("click",saveNotificationSettings);
-    $("testSystemNotification").addEventListener("click",async()=>{await enableSystemNotifications();const ok=await showSystemNotification("PocketLedger test notification","If you see this, system notifications work.","pocketledger-test");const s=$("notificationSettingsStatus");if(s)s.textContent=ok?"Test notification requested. Check your phone notification shade.":"Test could not be sent. Check Chrome permissions.";});
+
     document.querySelectorAll("[data-close-notifications]").forEach(b=>b.addEventListener("click",()=>$("notificationModal").classList.add("hidden")));
     document.querySelectorAll("[data-close-account]").forEach(b=>b.addEventListener("click",()=>$("accountModal").classList.add("hidden")));
     $("authForm").addEventListener("submit",submitAuth);
